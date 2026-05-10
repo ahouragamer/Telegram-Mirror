@@ -37,26 +37,10 @@ jobs:
             --channel "${{ github.event.inputs.channel }}" \
             --count "${{ github.event.inputs.count }}"
 
-      - name: Rename output file
+      - name: Commit to repo
         run: |
-          CHANNEL="${{ github.event.inputs.channel }}"
-          DATE=$(date +'%Y-%m-%d_%H-%M')
-          mv output/index.html "output/${CHANNEL}_${DATE}.html"
-          echo "FILENAME=${CHANNEL}_${DATE}.html" >> $GITHUB_ENV
-
-      - name: Upload to GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: "channel-${{ github.event.inputs.channel }}-${{ github.run_number }}"
-          name: "📡 @${{ github.event.inputs.channel }} — ${{ github.event.inputs.count }} پیام"
-          body: |
-            ## کانال: @${{ github.event.inputs.channel }}
-
-            فایل HTML رو دانلود کن و توی مرورگرت باز کن.
-
-            - 📨 تعداد پیام: ${{ github.event.inputs.count }}
-            - 🕐 زمان دریافت: ${{ github.run_started_at }}
-
-            > ⚠️ عکس‌ها و ویدیوها از سرورهای تلگرام لود میشن
-          files: output/${{ env.FILENAME }}
-          make_latest: true
+          git config user.name "TG Reader Bot"
+          git config user.email "bot@tgreader.local"
+          git add channels/
+          git commit -m "📡 @${{ github.event.inputs.channel }} — $(date +'%Y-%m-%d %H:%M') UTC"
+          git push
