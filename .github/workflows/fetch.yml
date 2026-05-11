@@ -31,11 +31,22 @@ jobs:
       - name: Install dependencies
         run: pip install requests beautifulsoup4 lxml
 
+      - name: Create channels directory
+        run: mkdir -p channels
+
       - name: Fetch channel
         run: |
           python scripts/fetch_channel.py \
             --channel "${{ github.event.inputs.channel }}" \
             --count "${{ github.event.inputs.count }}"
+
+      - name: Check if files were created
+        run: |
+          if [ -z "$(ls -A channels/)" ]; then
+            echo "❌ Error: No files created in channels/ directory"
+            exit 1
+          fi
+          ls -lah channels/
 
       - name: Commit to repo
         run: |
