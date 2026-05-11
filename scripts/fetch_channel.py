@@ -214,70 +214,81 @@ def render_message_md(m):
     """هر پیام رو به صورت یه کارت جداگانه با table رندر می‌کنه"""
     lines = []
 
-    lines.append("<table>")
-    lines.append("<tr><td>")
+    # ── کارت اصلی با min-width برای جلوگیری از اسکرول افقی ──
+    # گیتهاب style رو حذف می‌کنه ولی width=100% روی td کمک می‌کنه
+    lines.append('<table width="100%">')
+    lines.append('<tr><td width="100%">')
     lines.append("")
 
-    # فوروارد
+    # ── فوروارد ──
     if m.get("forwarded_from"):
         lines.append(f"> ↪ **فوروارد از:** {escape_md(m['forwarded_from'])}")
         lines.append("")
 
-    # آلبوم (چند عکس)
+    # ── آلبوم — عکس‌ها زیر هم (نه کنار هم) برای موبایل ──
     if m.get("album") and len(m["album"]) > 1:
-        lines.append("<table><tr>")
         for ph in m["album"]:
-            lines.append(f'<td><a href="{ph}"><img src="{ph}" width="200"/></a></td>')
-        lines.append("</tr></table>")
+            lines.append(f'<a href="{ph}"><img src="{ph}" width="400"/></a>')
+            lines.append("<br/>")
         lines.append("")
-    # عکس تکی
+    # ── عکس تکی ──
     elif m.get("photo"):
         ph = m["photo"]
         lines.append(f'<a href="{ph}"><img src="{ph}" width="400"/></a>')
         lines.append("")
 
-    # ویدیو — دیزاین شبیه تلگرام
+    # ── ویدیو — thumbnail با آیکون پخش روی آن ──
     if m.get("video"):
         thumb = m.get("video_thumb", "")
         duration = m.get("video_duration", "")
         vid_url = m["video"]
+
         if thumb:
-            lines.append(f'<a href="{vid_url}"><img src="{thumb}" width="400"/></a>')
+            # آیکون پخش روی thumbnail با SVG badge
+            play_icon = "https://img.shields.io/badge/%E2%96%B6%EF%B8%8F_Play-000000AA?style=for-the-badge&logoColor=white"
+            lines.append(f'<a href="{vid_url}"><img src="{thumb}" width="400"/></a><br/>')
+            lines.append(f'<a href="{vid_url}"><img src="{play_icon}" height="28"/></a>')
             lines.append("")
-        lines.append("<table><tr>")
-        lines.append('<td width="52">')
-        lines.append(f'<a href="{vid_url}"><img src="https://img.shields.io/badge/%E2%96%B6-2CA5E0?style=flat-square&logoColor=white" width="42" height="42"/></a>')
-        lines.append("</td><td>")
-        dur_text = f'<sub>{duration}</sub>' if duration else ""
-        lines.append(f'<b><a href="{vid_url}">⬇ دانلود ویدیو</a></b><br/>{dur_text}')
-        lines.append("</td></tr></table>")
+        else:
+            lines.append(f'🎬 <a href="{vid_url}"><b>▶ پخش / دانلود ویدیو</b></a>')
+            lines.append("")
+
+        # ردیف اطلاعات ویدیو
+        lines.append('<table><tr>')
+        lines.append('<td width="64">')
+        lines.append(f'<a href="{vid_url}"><img src="https://img.shields.io/badge/%E2%AC%87-2CA5E0?style=flat-square&logoColor=white" width="56" height="56"/></a>')
+        lines.append('</td><td>')
+        dur_text = f"<br/><sub>🕐 {duration}</sub>" if duration else ""
+        lines.append(f'<b><a href="{vid_url}">⬇ دانلود ویدیو</a></b>{dur_text}')
+        lines.append('</td></tr></table>')
         lines.append("")
 
-    # فایل/سند — دیزاین شبیه تلگرام
+    # ── فایل/سند — دیزاین شبیه تلگرام ──
     if m.get("doc_title"):
         doc_url = m.get("doc_url", "")
         doc_title = escape_md(m["doc_title"])
         doc_extra = escape_md(m.get("doc_extra", ""))
 
-        lines.append("<table><tr>")
-        lines.append('<td width="52">')
+        lines.append('<table><tr>')
+        lines.append('<td width="64">')
+        # آیکون دانلود بزرگ‌تر (56x56)
         if doc_url:
-            lines.append(f'<a href="{doc_url}"><img src="https://img.shields.io/badge/%E2%AC%87-2CA5E0?style=flat-square&logoColor=white" width="42" height="42"/></a>')
+            lines.append(f'<a href="{doc_url}"><img src="https://img.shields.io/badge/%E2%AC%87-2CA5E0?style=flat-square&logoColor=white" width="56" height="56"/></a>')
         else:
-            lines.append('<img src="https://img.shields.io/badge/%E2%AC%87-555?style=flat-square&logoColor=white" width="42" height="42"/>')
-        lines.append("</td>")
-        lines.append("<td>")
+            lines.append('<img src="https://img.shields.io/badge/%E2%AC%87-555555?style=flat-square&logoColor=white" width="56" height="56"/>')
+        lines.append('</td>')
+        lines.append('<td>')
         if doc_url:
-            lines.append(f'<b><a href="{doc_url}">{doc_title}</a></b><br/>')
+            lines.append(f'<b><a href="{doc_url}">{doc_title}</a></b>')
         else:
-            lines.append(f'<b>{doc_title}</b><br/>')
+            lines.append(f'<b>{doc_title}</b>')
         if doc_extra:
-            lines.append(f'<sub>{doc_extra}</sub>')
-        lines.append("</td>")
-        lines.append("</tr></table>")
+            lines.append(f'<br/><sub>{doc_extra}</sub>')
+        lines.append('</td>')
+        lines.append('</tr></table>')
         lines.append("")
 
-    # نظرسنجی
+    # ── نظرسنجی ──
     if m.get("poll_question"):
         lines.append(f'📊 **{escape_md(m["poll_question"])}**')
         lines.append("")
@@ -285,19 +296,21 @@ def render_message_md(m):
             lines.append(f"▫️ {escape_md(opt)}")
         lines.append("")
 
-    # متن پیام
+    # ── متن پیام — word-wrap با <br/> ──
     if m.get("text"):
         text = escape_md(m["text"])
-        text = text.replace("\n", "<br/>")
-        lines.append(text)
+        # هر خط رو جداگانه با <br/> جدا کن تا اسکرول افقی نداشته باشه
+        lines_text = text.split("\n")
+        wrapped = "<br/>".join(lines_text)
+        lines.append(wrapped)
         lines.append("")
 
-    # ری‌اکشن‌ها
+    # ── ری‌اکشن‌ها ──
     if m.get("reactions"):
         lines.append("&nbsp;&nbsp;".join(m["reactions"]))
         lines.append("")
 
-    # فوتر
+    # ── فوتر ──
     footer_parts = []
     if m.get("views"):
         footer_parts.append(f"👁 **{m['views']}**")
