@@ -1,9 +1,9 @@
-name: ⬇️ Downloader
+name: ⬇️ Download Telegram Post
 
 on:
   workflow_dispatch:
     inputs:
-      post_url:
+      url:
         description: 'لینک پست تلگرام (مثال: https://t.me/channelname/123)'
         required: true
         type: string
@@ -14,7 +14,6 @@ permissions:
 jobs:
   download:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
 
     steps:
       - name: Checkout
@@ -26,28 +25,30 @@ jobs:
           python-version: '3.11'
 
       - name: Install dependencies
-        run: |
-          pip install requests beautifulsoup4 lxml
-          sudo apt-get install -y wget p7zip-full
+        run: pip install requests beautifulsoup4 lxml
 
-      - name: Download file
+      - name: Download post
         run: |
           python scripts/public_channels_downloader.py \
-            --url "${{ github.event.inputs.post_url }}"
+            --url "${{ github.event.inputs.url }}"
 
       - name: Check output
         run: |
-          echo "=== Downloaded files ==="
+          if [ -z "$(ls -A downloads/ 2>/dev/null)" ]; then
+            echo "❌ No files downloaded"
+            exit 1
+          fi
+          echo "✅ Downloaded files:"
           find downloads/ -type f | sort
-          echo "=== Sizes ==="
-          du -sh downloads/*/* 2>/dev/null || echo "No files found"
 
       - name: Commit to repo
         run: |
-          git config user.name "TG Downloader Bot"
-          git config user.email "bot@tgreader.local"
+          git config user.name "TG Mirror Bot"
+          git config user.email "bot@tgmirror.local"
           git add downloads/
-          git status
-          git diff --staged --stat
-          git commit -m "⬇️ Downloaded from ${{ github.event.inputs.post_url }} — $(date +'%Y-%m-%d %H:%M') UTC" || echo "Nothing to commit"
-          git push
+          if git diff --cached --quiet; then
+            echo "Nothing to commit"
+          else
+            git commit -m "⬇️ Download — $(date +'%Y-%m-%d %H:%M') UTC"
+            git push
+          fi
