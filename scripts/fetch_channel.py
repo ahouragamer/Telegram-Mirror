@@ -330,7 +330,7 @@ def render_message_md(m):
         if thumb:
             play_badge = "https://img.shields.io/badge/%E2%96%B6%EF%B8%8F_Play-000000?style=for-the-badge"
             lines.append(f'<a href="{post_url}"><img src="{thumb}" width="400"/></a><br/>')
-            lines.append(f'<a href="{post_url}"><img src="{play_badge}" height="28"/></a>')
+            lines.append(f'<a href="{post_url}"><img src="{play_badge}" height="80"/></a>')
             lines.append("")
         extra = f"🕐 {duration}" if duration else ""
         lines.extend(download_box(post_url, "دانلود ویدیو", extra))
