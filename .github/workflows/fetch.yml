@@ -12,6 +12,11 @@ on:
         required: false
         default: '100'
         type: string
+      post:
+        description: 'لینک پست خاص (اختیاری) — مثال: https://t.me/channelname/123'
+        required: false
+        default: ''
+        type: string
 
 permissions:
   contents: write
@@ -19,6 +24,8 @@ permissions:
 jobs:
   fetch:
     runs-on: ubuntu-latest
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -31,16 +38,30 @@ jobs:
       - name: Install dependencies
         run: pip install requests beautifulsoup4 lxml
 
+      - name: Create channels directory
+        run: mkdir -p channels
+
       - name: Fetch channel
         run: |
           python scripts/fetch_channel.py \
             --channel "${{ github.event.inputs.channel }}" \
-            --count "${{ github.event.inputs.count }}"
+            --count "${{ github.event.inputs.count }}" \
+            --post "${{ github.event.inputs.post }}"
+
+      - name: Check if files were created
+        run: |
+          if [ -z "$(ls -A channels/)" ]; then
+            echo "❌ Error: No files created in channels/ directory"
+            exit 1
+          fi
+          ls -lah channels/
 
       - name: Commit to repo
         run: |
           git config user.name "TG Reader Bot"
           git config user.email "bot@tgreader.local"
           git add channels/
-          git commit -m "📡 @${{ github.event.inputs.channel }} — $(date +'%Y-%m-%d %H:%M') UTC"
+          git status
+          git diff --staged --stat
+          git commit -m "📡 @${{ github.event.inputs.channel }} — $(date +'%Y-%m-%d %H:%M') UTC" || echo "Nothing to commit"
           git push

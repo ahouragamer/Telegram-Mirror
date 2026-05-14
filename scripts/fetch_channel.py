@@ -40,9 +40,21 @@ def parse_message(el):
     views_el = el.select_one(".tgme_widget_message_views")
     msg["views"] = views_el.get_text(strip=True) if views_el else ""
 
+    # ── متن + لینک‌های امبد شده ──
     text_el = el.select_one(".tgme_widget_message_text")
     if text_el:
-        msg["text"] = text_el.get_text(separator="\n", strip=True)
+        # کلون می‌کنیم تا DOM اصلی رو خراب نکنیم
+        import copy
+        text_clone = copy.copy(text_el)
+        # هر لینک رو به فرمت "متن (url)" تبدیل می‌کنیم
+        for a in text_clone.find_all("a"):
+            href = a.get("href", "").strip()
+            link_text = a.get_text(strip=True)
+            if href and href != link_text:
+                a.replace_with(f"{link_text} ({href})")
+            elif href:
+                a.replace_with(href)
+        msg["text"] = text_clone.get_text(separator="\n", strip=True)
     else:
         msg["text"] = ""
 
@@ -210,25 +222,78 @@ def fetch_channel(channel, count):
     return messages, channel_info
 
 
+def fetch_single_post(channel: str, post_id: str):
+    """یه پست خاص رو با ID اون می‌خونه"""
+    next_id = int(post_id) + 1
+    url = f"https://t.me/s/{channel}?before={next_id}"
+    print(f"[+] Fetching single post: {url}")
+
+    try:
+        resp = requests.get(url, headers=HEADERS, timeout=30)
+        resp.raise_for_status()
+    except Exception as e:
+        print(f"[!] Error fetching page: {e}")
+        sys.exit(1)
+
+    soup = BeautifulSoup(resp.text, "lxml")
+
+    # پیدا کردن پست با data-post
+    target = f"{channel}/{post_id}"
+    el = soup.find(attrs={"data-post": target})
+    if not el:
+        el = soup.find(attrs={"data-post": post_id})
+    if not el:
+        all_posts = soup.select(".tgme_widget_message")
+        if all_posts:
+            el = all_posts[-1]
+            print(f"[~] Exact post not found, using last post on page")
+        else:
+            print(f"[!] Post {post_id} not found. Channel may be private or post deleted.")
+            sys.exit(1)
+
+    # اطلاعات کانال
+    channel_info = {"name": channel, "title": "", "description": "", "avatar": "", "members": ""}
+    title_el = soup.select_one(".tgme_channel_info_header_title")
+    if title_el:
+        channel_info["title"] = title_el.get_text(strip=True)
+    avatar_el = soup.select_one(".tgme_page_photo_image img, .tgme_channel_info_header_image img")
+    if avatar_el:
+        channel_info["avatar"] = avatar_el.get("src", "")
+    members_el = soup.select_one(".tgme_channel_info_counter .counter_value")
+    if members_el:
+        channel_info["members"] = members_el.get_text(strip=True)
+
+    return [parse_message(el)], channel_info
+
+
+def parse_post_url(url: str):
+    """لینک پست رو به channel و post_id تبدیل می‌کنه"""
+    url = url.strip().rstrip("/").split("?")[0]
+    m = re.search(r"t(?:elegram)?\.me/([^/]+)/(\d+)", url)
+    if m:
+        return m.group(1), m.group(2)
+    return None, None
+
+
 def escape_md(text):
     return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
 def download_box(post_url: str, label: str, extra: str = "") -> list:
     """
-    یه باکس دانلود می‌سازه با لینک پست داخل code block
-    تا کاربر بتونه با یه کلیک کپی کنه و بره داخل اکشن paste کنه
+    باکس دانلود با لینک پست در code block
+    کاربر کپی می‌کنه و توی اکشن ⬇️ Download Telegram Post paste می‌کنه
     """
     lines = []
     lines.append('<table><tr><td>')
     lines.append(f'<b>⬇️ {label}</b>')
     if extra:
         lines.append(f'<br/><sub>{extra}</sub>')
-    lines.append('<br/>')
-    lines.append('<sub>📋 لینک پست را کپی کن، سپس برو <b>Actions → ⬇️ Download Telegram Post</b> و paste کن:</sub>')
+    lines.append('<br/><br/>')
+    lines.append('<sub>📋 لینک پست را کپی کن، سپس برو <b>Actions ← ⬇️ Download Telegram Post</b> و paste کن:</sub>')
     lines.append('</td></tr>')
     lines.append('<tr><td>')
-    lines.append(f'```\n{post_url}\n```')
+    lines.append(f'\n```\n{post_url}\n```\n')
     lines.append('</td></tr></table>')
     lines.append('')
     return lines
@@ -262,11 +327,11 @@ def render_message_md(m):
         thumb = m.get("video_thumb", "")
         duration = m.get("video_duration", "")
         post_url = m.get("url", "")
-
         if thumb:
-            lines.append(f'<a href="{thumb}"><img src="{thumb}" width="400"/></a><br/>')
+            play_badge = "https://img.shields.io/badge/%E2%96%B6%EF%B8%8F_Play-000000?style=for-the-badge"
+            lines.append(f'<a href="{post_url}"><img src="{thumb}" width="400"/></a><br/>')
+            lines.append(f'<a href="{post_url}"><img src="{play_badge}" height="80"/></a>')
             lines.append("")
-
         extra = f"🕐 {duration}" if duration else ""
         lines.extend(download_box(post_url, "دانلود ویدیو", extra))
 
@@ -280,7 +345,7 @@ def render_message_md(m):
         post_url = m.get("url", "")
         doc_title = escape_md(m["doc_title"])
         doc_extra = escape_md(m.get("doc_extra", ""))
-        lines.extend(download_box(post_url, f"دانلود سند — {doc_title}", doc_extra))
+        lines.extend(download_box(post_url, f"دانلود فایل — {doc_title}", doc_extra))
 
     # ── نظرسنجی ──
     if m.get("poll_question"):
@@ -290,11 +355,10 @@ def render_message_md(m):
             lines.append(f"▫️ {escape_md(opt)}")
         lines.append("")
 
-    # ── متن ──
+    # ── متن (با لینک‌های امبد) ──
     if m.get("text"):
         text = escape_md(m["text"])
-        lines_text = text.split("\n")
-        wrapped = "<br/>".join(lines_text)
+        wrapped = "<br/>".join(text.split("\n"))
         lines.append(wrapped)
         lines.append("")
 
@@ -358,7 +422,8 @@ def render_markdown(messages, channel_info, channel, fetch_time):
     lines.append("---")
     lines.append("")
 
-    for m in messages:
+    # ── پیام‌ها — جدیدترین اول ──
+    for m in reversed(messages):
         lines.append(render_message_md(m))
 
     lines.append("---")
@@ -375,6 +440,7 @@ def main():
         parser = argparse.ArgumentParser(description="Fetch Telegram channel messages")
         parser.add_argument("--channel", required=True, help="Channel username (without @)")
         parser.add_argument("--count", type=int, default=100, help="Number of messages to fetch")
+        parser.add_argument("--post", default="", help="لینک یا ID پست خاص (اختیاری)")
         args = parser.parse_args()
 
         channel = args.channel.lstrip("@").strip()
@@ -382,10 +448,28 @@ def main():
             print("[!] Error: Channel name is empty")
             sys.exit(1)
 
-        count = max(10, min(args.count, 200))
-        print(f"[*] Parameters: channel=@{channel}, count={count}")
+        # ── حالت پست خاص ──
+        if args.post:
+            post_input = args.post.strip()
+            # اگه لینک کامل بود parse کن
+            if "t.me" in post_input:
+                parsed_channel, post_id = parse_post_url(post_input)
+                if parsed_channel:
+                    channel = parsed_channel
+                else:
+                    print(f"[!] Cannot parse post URL: {post_input}")
+                    sys.exit(1)
+            else:
+                # فقط عدد ID وارد شده
+                post_id = post_input
 
-        messages, channel_info = fetch_channel(channel, count)
+            print(f"[*] Single post mode: @{channel}/{post_id}")
+            messages, channel_info = fetch_single_post(channel, post_id)
+        else:
+            # ── حالت عادی — کل کانال ──
+            count = max(10, min(args.count, 200))
+            print(f"[*] Parameters: channel=@{channel}, count={count}")
+            messages, channel_info = fetch_channel(channel, count)
 
         if not messages:
             print("[!] No messages fetched.")
@@ -404,7 +488,12 @@ def main():
             print(f"[!] Error creating directory: {e}")
             sys.exit(1)
 
-        filename = f"{channel}_{file_date}.md"
+        # اگه پست خاص بود اسم فایل متفاوته
+        if args.post:
+            filename = f"{channel}_post{post_id}_{file_date}.md"
+        else:
+            filename = f"{channel}_{file_date}.md"
+
         out_file = out_dir / filename
 
         try:
